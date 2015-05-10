@@ -20,13 +20,24 @@ function debounce(fn, delay) {
   }, delay);
 }
 
-var Color = chroma.Color;
+function objectToArray(o) {
+  return Object.keys(o).map(function (key) {
+    return o[key];
+  });
+}
+
+function colorOk(color) {
+  return color.every(function (color) {
+    return color >= 0 && color <= 255
+  });
+}
+
 var colorspace = {
   'hcl': {
     dimensions: [
       ['h', 'hue', 0, 360, 0],
-      ['c', 'chroma', 0, 5, 1],
-      ['l', 'lightness', 0, 1.7, 0.6]],
+      ['c', 'chroma', 0, 135, 60],
+      ['l', 'lightness', 0, 100, 50]],
     axis: [
       ['hlc', 'hue-lightness'],
       ['clh', 'chroma-lightness'],
@@ -51,7 +62,7 @@ function Colorpicker(cb) {
 Colorpicker.prototype = {
   init: function(config, cb) {
     initPosSet = false;
-    function getctx(id, autoscale) {
+    function getctx(id) {
       return document.getElementById(id).getContext('2d');
     }
 
@@ -66,16 +77,20 @@ Colorpicker.prototype = {
       xyz[config.dy] = y;
       xyz[config.dz] = config.zval;
 
-      var c = new Color(xyz, 'hcl');
-      return c;
+      return d3.hcl.apply(null, xyz);
+    }
+
+    function checkColor(col) {
+      if (colorOk(objectToArray(col.rgb()))) {
+        return col.toString();
+      }
+      return '#000000';
     }
 
     var colorctx = getctx('colorspace');
 
     function renderColorSpace() {
       var x, y, xv, yv, color, idx,
-        dx = config.dx,
-        dy = config.dy,
         xdim = config.xdim,
         ydim = config.ydim,
         sq = config.sq,
@@ -95,8 +110,8 @@ Colorpicker.prototype = {
           xv = xdim[2] + (x / sq) * (xdim[3] - xdim[2]);
           yv = ydim[2] + (y / sq) * (ydim[3] - ydim[2]);
 
-          color = getColor(xv, yv).rgb;
-          if (isNaN(color[0])) {
+          color = objectToArray(getColor(xv, yv).rgb());
+          if (!colorOk(color)) {
             imdata.data[idx] = 255;
             imdata.data[idx + 1] = 0;
             imdata.data[idx + 2] = 0;
@@ -135,7 +150,7 @@ Colorpicker.prototype = {
       d3.select('#slider')
         .attr('min', config.zdim[2])
         .attr('max', config.zdim[3])
-        .attr('step', config.zdim[3] > 99 ? 1 : 0.01)
+        .attr('step', 1)
         .attr('value', config.zval);
 
       d3.select('.js-slider-title')
@@ -155,13 +170,13 @@ Colorpicker.prototype = {
 
     function getXY(color) {
       // inverse operation to getColor
-      var hcl = color.hcl();
+      var hcl = objectToArray(d3.hcl(color));
       return [hcl[config.dx], hcl[config.dy]];
     }
 
     var slider = d3.select('#slider');
     slider.on('mousemove', function() {
-        var v = this.value;
+        var v = Number(this.value);
         d3.select('.js-slider-value').text(v);
         config.zval = v;
         renderColorSpace();
@@ -235,7 +250,7 @@ Colorpicker.prototype = {
       // `from` drag control on the colorpicker.
       ctx.beginPath();
       ctx.strokeStyle = '#fff';
-      col_f = getColor(gradient.from[0], gradient.from[1]).hex();
+      col_f = checkColor(getColor(gradient.from[0], gradient.from[1]));
       ctx.fillStyle = col_f;
       ctx.arc(x0, y0, a, 0, Math.PI * 2);
       ctx.fill();
@@ -244,7 +259,7 @@ Colorpicker.prototype = {
 
       // `to` drag control on the colorpicker.
       ctx.beginPath();
-      col_t = getColor(gradient.to[0], gradient.to[1]).hex();
+      col_t = checkColor(getColor(gradient.to[0], gradient.to[1]));
       ctx.fillStyle = col_t;
       ctx.arc(x1, y1, a, 0, Math.PI * 2);
       ctx.fill();
@@ -261,7 +276,7 @@ Colorpicker.prototype = {
 
         ctx.beginPath();
         ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-        col = getColor(fx, fy).hex();
+        col = checkColor(getColor(fx, fy));
         colors.push(col);
         ctx.fillStyle = col;
         ctx.arc(x, y, b, 0, Math.PI * 2);
@@ -314,11 +329,12 @@ Colorpicker.prototype = {
       d3.select('#sl-val').select('span').html(zval);
       updateAxis(parts[0]);
 
+
       return {
         swatches: Number(parts[1]),
         axis: parts[0],
-        from: getXY(new Color(parts[3])),
-        to: getXY(new Color(parts[4]))
+        from: getXY('#' + parts[3]),
+        to: getXY('#' + parts[4])
       };
     }
 
@@ -326,8 +342,8 @@ Colorpicker.prototype = {
       return config.x + config.y + config.z + '/' +
         gradient.steps + '/' +
         config.zval + '/' +
-        getColor(gradient.from[0], gradient.from[1]).hex().substr(1) + '/' +
-        getColor(gradient.to[0], gradient.to[1]).hex().substr(1);
+        getColor(gradient.from[0], gradient.from[1]).toString().substr(1) + '/' +
+        getColor(gradient.to[0], gradient.to[1]).toString().substr(1);
     }
 
     var drag = d3.behavior.drag()
@@ -463,7 +479,7 @@ select.on('click', function() {
 });
 
 if (!location.hash) location.hash = '/hlc/6/1/16534C/E2E062';
-var color = new Colorpicker(function(colors) {
+new Colorpicker(function(colors) {
   colorArray = colors;
   select.attr('data-clipboard-text', colors);
 });
